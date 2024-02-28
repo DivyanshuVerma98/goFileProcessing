@@ -1,0 +1,5 @@
+DB_USER=TestUser
+DB_PASSWORD=testingPass
+DB_NAME=TestDB
+DB_HOST=db
+DB_PORT=5432

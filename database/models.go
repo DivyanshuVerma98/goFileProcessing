@@ -1,4 +1,4 @@
-package models
+package database
 
 type MotorPolicy struct {
 	RmCode                  string `json:"rm_code"`

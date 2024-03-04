@@ -2,12 +2,16 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+
+	"github.com/DivyanshuVerma98/goFileProcessing/handlers"
+	"github.com/gorilla/mux"
 )
 
 func main() {
-	fmt.Println("Done")
-	fmt.Println("Done 111 2 211")
-	a := 1
-	b := 3
-	fmt.Println(a+b)
+	fmt.Print("Starting ..... \n")
+
+	router := mux.NewRouter()
+	router.HandleFunc("/fms/upload_doc/", handlers.UploadFileHandler).Methods("POST")
+	http.ListenAndServe(":3000", router)
 }

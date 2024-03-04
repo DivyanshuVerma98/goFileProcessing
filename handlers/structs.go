@@ -1,6 +1,7 @@
-package database
+package handlers
 
 type MotorPolicy struct {
+	TransactionType         string `json:"transaction_type"`
 	RmCode                  string `json:"rm_code"`
 	RmName                  string `json:"rm_name"`
 	ChildId                 string `json:"child_id"`
@@ -38,11 +39,17 @@ type MotorPolicy struct {
 	UtrAmount               string `json:"utr_amount"`
 	Slot                    string `json:"slot"`
 	PaidOnIn                string `json:"paid_on_in"`
-	InPercentage            string `json:"in_percentage"`
-	InAmount                string `json:"in_amount"`
+	TentativeInPercentage   string `json:"tentative_in_percentage"`
+	TentativeInAmount       string `json:"tentative_in_amount"`
 	PaidOnOut               string `json:"paid_on_out"`
 	OutPercentage           string `json:"out_percentage"`
 	OutAmount               string `json:"out_amount"`
 	CoType                  string `json:"co_type"`
 	Remarks                 string `json:"remarks"`
+}
+
+type Response struct {
+	Status  int               `json:"status"`
+	Message string            `json:"message"`
+	Data    map[string]string `json:"data"`
 }

@@ -7,10 +7,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/DivyanshuVerma98/goFileProcessing/structs"
 )
 
 func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 
+	BATCH_SIZE := 1
+	COUNT := 0
 	file, handler, err := r.FormFile("data_file")
 	if err != nil {
 		log.Panic(err)
@@ -22,9 +26,17 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	// Removing headers
 	csv_reader.Read()
 
-	validate_channel := make(chan *MotorPolicy, 10)
-	result := make(chan bool)
-	go validate_row(validate_channel, result)
+	validate_channel := make(chan *structs.BatchData, 10)
+	db_operation_channel := make(chan *structs.BatchData, 10)
+	create_report_channel := make(chan *structs.BatchData, 10)
+	// result := make(chan bool)
+	go ValidateBatchData(validate_channel, db_operation_channel)
+	go QueryBatchData(db_operation_channel, create_report_channel)
+	batch_data := structs.BatchData{
+		MotorPolicy: map[string]structs.MotorPolicy{},
+		Error:       make(map[string]string),
+	}
+
 	for {
 		row, err := csv_reader.Read()
 		if err != nil {
@@ -34,7 +46,7 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 			log.Panic(err)
 		}
 
-		policy := MotorPolicy{
+		policy := structs.MotorPolicy{
 			TransactionType:         row[0],
 			RmCode:                  row[1],
 			RmName:                  row[2],
@@ -81,15 +93,47 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 			CoType:                  row[43],
 			Remarks:                 row[44],
 		}
-		validate_channel <- &policy
+		batch_data.MotorPolicy[policy.PolicyNo] = policy
+		COUNT += 1
+		if COUNT >= BATCH_SIZE {
+			data_copy := structs.BatchData{
+				MotorPolicy: batch_data.MotorPolicy,
+				Error:       batch_data.Error,
+			}
+			validate_channel <- &data_copy
+			batch_data = structs.BatchData{
+				MotorPolicy: map[string]structs.MotorPolicy{},
+				Error:       make(map[string]string),
+			}
+			COUNT = 0
+		}
 	}
+	if COUNT != 0 {
+		data_copy := structs.BatchData{
+			MotorPolicy: batch_data.MotorPolicy,
+			Error:       batch_data.Error,
+		}
+		validate_channel <- &data_copy
+
+	}
+	<-create_report_channel
 	close(validate_channel)
-	<-result
-	close(result)
+	close(db_operation_channel)
+	close(create_report_channel)
+	// <-result
+	// close(result)
 	w.WriteHeader(http.StatusOK)
-	response := Response{
+	response := structs.Response{
 		Status:  http.StatusOK,
 		Message: "Success",
 	}
 	json.NewEncoder(w).Encode(response)
 }
+
+// `
+// POSTGRES_USER=root
+// POSTGRES_PASSWORD=root
+// DB_NAME=fdms
+// DB_HOST=file_processing_db
+// DB_PORT=5432
+// `

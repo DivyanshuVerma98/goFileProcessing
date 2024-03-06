@@ -1,4 +1,4 @@
-package handlers
+package structs
 
 type MotorPolicy struct {
 	TransactionType         string `json:"transaction_type"`
@@ -46,6 +46,12 @@ type MotorPolicy struct {
 	OutAmount               string `json:"out_amount"`
 	CoType                  string `json:"co_type"`
 	Remarks                 string `json:"remarks"`
+}
+
+type BatchData struct{
+	MotorPolicy map[string]MotorPolicy
+	Error map[string]string
+
 }
 
 type Response struct {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/DivyanshuVerma98/goFileProcessing/structs"
 )
@@ -28,10 +29,13 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 	validate_channel := make(chan *structs.BatchData, 10)
 	db_operation_channel := make(chan *structs.BatchData, 10)
-	create_report_channel := make(chan *structs.BatchData, 10)
+	// create_report_channel := make(chan *structs.BatchData, 10)
+	var wait_group sync.WaitGroup
 	// result := make(chan bool)
-	go ValidateBatchData(validate_channel, db_operation_channel)
-	go QueryBatchData(db_operation_channel, create_report_channel)
+	wait_group.Add(1)
+	go ValidateBatchData(validate_channel, db_operation_channel, &wait_group)
+	wait_group.Add(1)
+	go QueryBatchData(db_operation_channel, &wait_group)
 	batch_data := structs.BatchData{
 		MotorPolicy: map[string]structs.MotorPolicy{},
 		Error:       make(map[string]string),
@@ -116,10 +120,8 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		validate_channel <- &data_copy
 
 	}
-	<-create_report_channel
 	close(validate_channel)
-	close(db_operation_channel)
-	close(create_report_channel)
+	wait_group.Wait()
 	// <-result
 	// close(result)
 	w.WriteHeader(http.StatusOK)
@@ -129,11 +131,3 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(response)
 }
-
-// `
-// POSTGRES_USER=root
-// POSTGRES_PASSWORD=root
-// DB_NAME=fdms
-// DB_HOST=file_processing_db
-// DB_PORT=5432
-// `

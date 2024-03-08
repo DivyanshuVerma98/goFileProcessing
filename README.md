@@ -1,5 +1,5 @@
-DB_USER=TestUser
-DB_PASSWORD=testingPass
-DB_NAME=TestDB
-DB_HOST=db
+POSTGRES_USER=root
+POSTGRES_PASSWORD=root
+DB_NAME=fdms
+DB_HOST=file_processing_db
 DB_PORT=5432

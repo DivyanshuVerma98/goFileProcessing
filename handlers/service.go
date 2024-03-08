@@ -9,7 +9,7 @@ import (
 	"github.com/DivyanshuVerma98/goFileProcessing/utils"
 )
 
-func ValidateBatchData(source chan *structs.BatchData, 
+func ValidateBatchData(source chan *structs.BatchData,
 	destination chan *structs.BatchData, wait_group *sync.WaitGroup) {
 	fmt.Println("Inside ValidateBatchData")
 	defer wait_group.Done()

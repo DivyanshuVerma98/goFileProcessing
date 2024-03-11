@@ -7,15 +7,20 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"reflect"
 	"runtime"
 	"sync"
 
+	"github.com/DivyanshuVerma98/goFileProcessing/database"
 	"github.com/DivyanshuVerma98/goFileProcessing/structs"
+	"github.com/DivyanshuVerma98/goFileProcessing/utils"
 )
 
 func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 
-	BATCH_SIZE := 1
+	response_data := make(map[string]string)
+	BATCH_SIZE := 5000
 	COUNT := 0
 	file, handler, err := r.FormFile("data_file")
 	if err != nil {
@@ -30,22 +35,94 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 
 	validate_channel := make(chan *structs.BatchData, 10)
 	db_operation_channel := make(chan *structs.BatchData, 10)
+	create_csv_channel := make(chan *structs.BatchData, 10)
 	// create_report_channel := make(chan *structs.BatchData, 10)
-	var wait_group sync.WaitGroup
+	var wait_group_1 sync.WaitGroup
+	var wait_group_2 sync.WaitGroup
+	var wait_group_3 sync.WaitGroup
 	// result := make(chan bool)
 	for i := 0; i < runtime.NumCPU()-1; i++ {
-		wait_group.Add(1)
-		go ValidateBatchData(validate_channel, db_operation_channel, &wait_group)
+		wait_group_1.Add(1)
+		go func() {
+			defer wait_group_1.Done()
+			for batch_data := range validate_channel {
+				for policy_no, row_data := range batch_data.MotorPolicy {
+					if !utils.IsValidDateFormat(row_data.BookingDate) {
+						batch_data.Error[policy_no] = "Date format error. Invalid format - "+row_data.BookingDate
+						fmt.Println("Validate ->", policy_no, "Got Issues")
+					} else {
+						fmt.Println("Validate ->", policy_no, "No Issues")
+					}
+				}
+				db_operation_channel <- batch_data
+			}
+		}()
 	}
 
-	wait_group.Add(1)
-	go QueryBatchData(db_operation_channel, &wait_group)
+	// database.CreateTable()
+	for i := 0; i < runtime.NumCPU()-1; i++ {
+		wait_group_2.Add(1)
+		go func() {
+			defer wait_group_2.Done()
+			for batch_data := range db_operation_channel {
+				policy_list := []structs.MotorPolicy{}
+				for policy_no, policy_stuct := range batch_data.MotorPolicy {
+					_, exists := batch_data.Error[policy_no]
+					if !exists {
+						policy_list = append(policy_list, policy_stuct)
+					}
+				}
+				if len(policy_list) > 0 {
+					database.BulkInsert(policy_list)
+				}
+				create_csv_channel <- batch_data
+			}
+		}()
+	}
+
+	wait_group_3.Add(1)
+	go func() {
+		defer wait_group_3.Done()
+		complete_report, err := os.Create("complete_report.csv")
+		if err != nil {
+			log.Panic(err)
+		}
+		complete_report_writer := csv.NewWriter(complete_report)
+		defer complete_report_writer.Flush()
+		error_report, err := os.Create("error_report.csv")
+		if err != nil {
+			log.Panic(err)
+		}
+		error_report_writer := csv.NewWriter(error_report)
+		defer error_report_writer.Flush()
+		for batch_data := range create_csv_channel {
+			for policy_no, policy_stuct := range batch_data.MotorPolicy {
+				row := []string{}
+				values := reflect.ValueOf(policy_stuct)
+				for i := 0; i < values.NumField(); i++ {
+					field := values.Field(i)
+					row = append(row, field.String())
+				}
+				error_remark, exists := batch_data.Error[policy_no]
+				if exists {
+					row = append(row, error_remark)
+					error_report_writer.Write(row)
+					complete_report_writer.Write(row)
+				} else {
+					complete_report_writer.Write(row)
+				}
+			}
+		}
+	}()
+
+	// wait_group.Add(1)
+	// go QueryBatchData(db_operation_channel, &wait_group)
 
 	batch_data := structs.BatchData{
 		MotorPolicy: map[string]structs.MotorPolicy{},
 		Error:       make(map[string]string),
 	}
-	go func(){
+	go func() {
 		for {
 			row, err := csv_reader.Read()
 			if err != nil {
@@ -127,13 +204,20 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		close(validate_channel)
 	}()
-	wait_group.Wait()
+	wait_group_1.Wait()
+	close(db_operation_channel)
+	wait_group_2.Wait()
+	close(create_csv_channel)
+	wait_group_3.Wait()
+	response_data["complete_report_url"] = UploadFile("complete_report.csv")
+	response_data["error_report_url"] = UploadFile("error_report.csv")
 	// <-result
 	// close(result)
 	w.WriteHeader(http.StatusOK)
 	response := structs.Response{
 		Status:  http.StatusOK,
 		Message: "Success",
+		Data:    response_data,
 	}
 	json.NewEncoder(w).Encode(response)
 }

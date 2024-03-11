@@ -48,14 +48,23 @@ type MotorPolicy struct {
 	Remarks                 string `json:"remarks"`
 }
 
-type BatchData struct{
+type BatchData struct {
 	MotorPolicy map[string]MotorPolicy
-	Error map[string]string
-
+	Error       map[string]string
 }
 
 type Response struct {
 	Status  int               `json:"status"`
 	Message string            `json:"message"`
 	Data    map[string]string `json:"data"`
+}
+
+type UploadAPIResponse struct {
+	Data    Data   `json:"data"`
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+}
+
+type Data struct {
+	ReferenceID string `json:"referenceid"`
 }

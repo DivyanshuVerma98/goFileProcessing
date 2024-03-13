@@ -18,7 +18,7 @@ import (
 )
 
 func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
-
+	GetUserDetailsAPI()
 	response_data := make(map[string]string)
 	BATCH_SIZE := 5000
 	COUNT := 0
@@ -36,6 +36,8 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	validate_channel := make(chan *structs.BatchData, 10)
 	db_operation_channel := make(chan *structs.BatchData, 10)
 	create_csv_channel := make(chan *structs.BatchData, 10)
+	complete_file_url := make(chan string)
+	error_file_url := make(chan string)
 	// create_report_channel := make(chan *structs.BatchData, 10)
 	var wait_group_1 sync.WaitGroup
 	var wait_group_2 sync.WaitGroup
@@ -48,10 +50,10 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 			for batch_data := range validate_channel {
 				for policy_no, row_data := range batch_data.MotorPolicy {
 					if !utils.IsValidDateFormat(row_data.BookingDate) {
-						batch_data.Error[policy_no] = "Date format error. Invalid format - "+row_data.BookingDate
-						fmt.Println("Validate ->", policy_no, "Got Issues")
+						batch_data.Error[policy_no] = "Date format error. Invalid format - " + row_data.BookingDate
+						// fmt.Println("Validate ->", policy_no, "Got Issues")
 					} else {
-						fmt.Println("Validate ->", policy_no, "No Issues")
+						// fmt.Println("Validate ->", policy_no, "No Issues")
 					}
 				}
 				db_operation_channel <- batch_data
@@ -209,10 +211,15 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	wait_group_2.Wait()
 	close(create_csv_channel)
 	wait_group_3.Wait()
-	response_data["complete_report_url"] = UploadFile("complete_report.csv")
-	response_data["error_report_url"] = UploadFile("error_report.csv")
-	// <-result
-	// close(result)
+
+	go UploadFile("complete_report.csv", complete_file_url)
+	go UploadFile("error_report.csv", error_file_url)
+
+	complete_file_link := <-complete_file_url
+	error_file_link := <-error_file_url
+	response_data["complete_file_link"] = complete_file_link
+	response_data["error_file_link"] = error_file_link
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	response := structs.Response{
 		Status:  http.StatusOK,

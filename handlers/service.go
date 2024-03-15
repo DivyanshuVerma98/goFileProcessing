@@ -2,18 +2,73 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"sync"
 
+	"github.com/DivyanshuVerma98/goFileProcessing/constants"
 	"github.com/DivyanshuVerma98/goFileProcessing/database"
 	"github.com/DivyanshuVerma98/goFileProcessing/structs"
 	"github.com/DivyanshuVerma98/goFileProcessing/utils"
 )
+
+func MotorService(w http.ResponseWriter, r *http.Request) {
+	file, handler, err := r.FormFile("data_file")
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		log.Println("Error retrieving file: ", err)
+		http.Error(w, "Error retrieving file", http.StatusBadRequest)
+		return
+	}
+	log.Println("File Name - ", handler.Filename)
+	defer file.Close()
+	csv_reader := csv.NewReader(file)
+	headers, err := csv_reader.Read()
+	if err != nil {
+		log.Println("Error reading file: ", err)
+		http.Error(w, "Error reading file", http.StatusBadRequest)
+		return
+	}
+	is_valid, msg := utils.ValidateHeaders(headers,
+		constants.MOTOR_MAKER_CSV_TO_MODEL_MAP)
+	if !is_valid {
+		log.Println("Invalid headers: ", msg)
+		http.Error(w, "Invalid headers. "+msg, http.StatusBadRequest)
+		return
+	}
+	json.NewEncoder(w).Encode("Hello")
+
+}
+
+func MotorBatchGenerator(file *multipart.File) <-chan *structs.BatchData {
+	generator_chan := make(chan *structs.BatchData)
+	csv_reader := csv.NewReader(*file)
+	headers, _ := csv_reader.Read()
+	fmt.Println("HEADERS ", headers)
+	for _, val := range headers {
+		fmt.Println(val)
+	}
+	// go func() {
+	// 	defer close(generator_chan)
+	// 	for {
+	// 		row, err := csv_reader.Read()
+	// 		if err != nil {
+	// 			if err == io.EOF {
+	// 				break
+	// 			}
+	// 			fmt.Println(row)
+	// 		}
+	// 	}
+
+	// }()
+	return generator_chan
+}
 
 func ValidateBatchData(source chan *structs.BatchData,
 	destination chan *structs.BatchData, wait_group *sync.WaitGroup) {

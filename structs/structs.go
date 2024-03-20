@@ -49,8 +49,8 @@ type MotorPolicy struct {
 }
 
 type BatchData struct {
-	MotorPolicy map[string]MotorPolicy
-	Error       map[string]string
+	ValidList []map[string]string
+	ErrorList []map[string]string
 }
 
 type Response struct {

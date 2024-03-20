@@ -10,10 +10,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"runtime"
 	"sync"
 
 	"github.com/DivyanshuVerma98/goFileProcessing/constants"
-	"github.com/DivyanshuVerma98/goFileProcessing/database"
 	"github.com/DivyanshuVerma98/goFileProcessing/structs"
 	"github.com/DivyanshuVerma98/goFileProcessing/utils"
 )
@@ -48,21 +48,54 @@ func MotorService(w http.ResponseWriter, r *http.Request) {
 		SendResponse(w, "Error processing file", http.StatusInternalServerError, map[string]string{})
 		return
 	}
-	response := []map[string]string{}
-	for val := range MotorBatchGenerator(&file) {
+	response := []structs.BatchData{}
+	// batch_size, _ := strconv.Atoi(os.Getenv("MOTOR_BATCH_SIZE"))
+	batch_size := 1
+	batch_generator_chan := BatchGenerator(&file, batch_size)
+	valid_batch_chan := ValidateBatchGenerator(batch_generator_chan)
+	for val := range valid_batch_chan {
 		response = append(response, *val)
 	}
 	SendResponse(w, "Success", http.StatusOK, response)
 }
 
-func MotorBatchGenerator(file *multipart.File) <-chan *map[string]string {
-	// generator_chan := make(chan *structs.BatchData)
-	log.Println("Inside MotorBatchGenerator")
-	generator_chan := make(chan *map[string]string)
+func ValidateBatchGenerator(source_chan <-chan *structs.BatchData) <-chan *structs.BatchData {
+	log.Println("Inside ValidateBatchGenerator")
+	generator_chan := make(chan *structs.BatchData)
+	var wg sync.WaitGroup
+	go func() {
+		for i := 0; i < runtime.NumCPU()-1; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for batch_data := range source_chan {
+					for _, policy_data := range batch_data.ValidList {
+						if !utils.IsValidDateFormat(policy_data["booking_data"]) {
+
+							batch_data.ErrorList = append(batch_data.ErrorList, policy_data)
+
+							// batch_data.Error[policy_no] = "Date format error. Invalid format - " + row_data.BookingDate
+						}
+					}
+					generator_chan <- batch_data
+				}
+			}()
+		}
+		wg.Wait()
+		close(generator_chan)
+	}()
+	return generator_chan
+}
+
+func BatchGenerator(file *multipart.File, batch_size int) <-chan *structs.BatchData {
+	log.Println("Inside BatchGenerator")
+	generator_chan := make(chan *structs.BatchData)
 	csv_reader := csv.NewReader(*file)
 	headers, _ := csv_reader.Read()
 	go func() {
 		defer close(generator_chan)
+		batch_count := 0
+		batch_data := structs.BatchData{}
 		for {
 			row, err := csv_reader.Read()
 			if err == io.EOF {
@@ -77,44 +110,62 @@ func MotorBatchGenerator(file *multipart.File) <-chan *map[string]string {
 				key := constants.MOTOR_MAKER_CSV_TO_MODEL_MAP[headers[index]]
 				row_data[key] = field_val
 			}
-			generator_chan <- &row_data
+			batch_data.ValidList = append(batch_data.ValidList, row_data)
+			batch_count += 1
+			if batch_count >= batch_size {
+				batch_count = 0
+				data_copy := structs.BatchData{
+					ValidList: batch_data.ValidList,
+					ErrorList: batch_data.ErrorList,
+				}
+				generator_chan <- &data_copy
+				batch_data = structs.BatchData{}
+			}
+		}
+		if batch_count > 0 {
+			batch_count = 0
+			data_copy := structs.BatchData{
+				ValidList: batch_data.ValidList,
+				ErrorList: batch_data.ErrorList,
+			}
+			generator_chan <- &data_copy
+			batch_data = structs.BatchData{}
 		}
 	}()
 	return generator_chan
-
 }
 
-func ValidateBatchData(source chan *structs.BatchData,
-	destination chan *structs.BatchData, wait_group *sync.WaitGroup) {
-	fmt.Println("Inside ValidateBatchData")
-	defer wait_group.Done()
-	defer close(destination)
-	for batch_data := range source {
-		for policy_no, row_data := range batch_data.MotorPolicy {
-			if !utils.IsValidDateFormat(row_data.BookingDate) {
-				batch_data.Error[policy_no] = "This is the error"
-			}
-			fmt.Println("Validate", policy_no, "No Issues")
-		}
-		destination <- batch_data
-	}
-}
+// func ValidateBatchData(source chan *structs.BatchData,
+// 	destination chan *structs.BatchData, wait_group *sync.WaitGroup) {
+// 	fmt.Println("Inside ValidateBatchData")
+// 	defer wait_group.Done()
+// 	defer close(destination)
+// 	for batch_data := range source {
+// 		for policy_no, row_data := range batch_data.MotorPolicy {
+// 			if !utils.IsValidDateFormat(row_data.BookingDate) {
+// 				batch_data.Error[policy_no] = "This is the error"
+// 			}
+// 			fmt.Println("Validate", policy_no, "No Issues")
+// 		}
+// 		destination <- batch_data
+// 	}
+// }
 
-func QueryBatchData(source chan *structs.BatchData, wait_group *sync.WaitGroup) {
-	fmt.Println("Inside QueryBatchData")
-	defer wait_group.Done()
-	database.CreateTable()
-	for batch_data := range source {
-		policy_list := []structs.MotorPolicy{}
-		for _, policy_stuct := range batch_data.MotorPolicy {
-			policy_list = append(policy_list, policy_stuct)
-		}
-		// calling
-		// database.GetPolicyNo(policy_no_list)
-		database.BulkInsert(policy_list)
-		// destination <- batch_data
-	}
-}
+// func QueryBatchData(source chan *structs.BatchData, wait_group *sync.WaitGroup) {
+// 	fmt.Println("Inside QueryBatchData")
+// 	defer wait_group.Done()
+// 	database.CreateTable()
+// 	for batch_data := range source {
+// 		policy_list := []structs.MotorPolicy{}
+// 		for _, policy_stuct := range batch_data.MotorPolicy {
+// 			policy_list = append(policy_list, policy_stuct)
+// 		}
+// 		// calling
+// 		// database.GetPolicyNo(policy_no_list)
+// 		database.BulkInsert(policy_list)
+// 		// destination <- batch_data
+// 	}
+// }
 
 func GetUserDetailsAPI() string {
 	fmt.Println("Calling GetUserDetails API")

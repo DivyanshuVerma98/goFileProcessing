@@ -20,7 +20,6 @@ import (
 
 func MotorService(w http.ResponseWriter, r *http.Request) {
 	file, handler, err := r.FormFile("data_file")
-	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		log.Println("Error retrieving file: ", err)
 		http.Error(w, "Error retrieving file", http.StatusBadRequest)
@@ -32,42 +31,57 @@ func MotorService(w http.ResponseWriter, r *http.Request) {
 	headers, err := csv_reader.Read()
 	if err != nil {
 		log.Println("Error reading file: ", err)
-		http.Error(w, "Error reading file", http.StatusBadRequest)
+		SendResponse(w, "Error reading file", http.StatusBadRequest, map[string]string{})
 		return
+
 	}
 	is_valid, msg := utils.ValidateHeaders(headers,
 		constants.MOTOR_MAKER_CSV_TO_MODEL_MAP)
 	if !is_valid {
 		log.Println("Invalid headers: ", msg)
-		http.Error(w, "Invalid headers. "+msg, http.StatusBadRequest)
+		SendResponse(w, "Invalid headers. "+msg, http.StatusBadRequest, map[string]string{})
 		return
 	}
-	json.NewEncoder(w).Encode("Hello")
-
+	// Reset file pointer to the beginning
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		log.Println("Error resetting file pointer:", err)
+		SendResponse(w, "Error processing file", http.StatusInternalServerError, map[string]string{})
+		return
+	}
+	response := []map[string]string{}
+	for val := range MotorBatchGenerator(&file) {
+		response = append(response, *val)
+	}
+	SendResponse(w, "Success", http.StatusOK, response)
 }
 
-func MotorBatchGenerator(file *multipart.File) <-chan *structs.BatchData {
-	generator_chan := make(chan *structs.BatchData)
+func MotorBatchGenerator(file *multipart.File) <-chan *map[string]string {
+	// generator_chan := make(chan *structs.BatchData)
+	log.Println("Inside MotorBatchGenerator")
+	generator_chan := make(chan *map[string]string)
 	csv_reader := csv.NewReader(*file)
 	headers, _ := csv_reader.Read()
-	fmt.Println("HEADERS ", headers)
-	for _, val := range headers {
-		fmt.Println(val)
-	}
-	// go func() {
-	// 	defer close(generator_chan)
-	// 	for {
-	// 		row, err := csv_reader.Read()
-	// 		if err != nil {
-	// 			if err == io.EOF {
-	// 				break
-	// 			}
-	// 			fmt.Println(row)
-	// 		}
-	// 	}
-
-	// }()
+	go func() {
+		defer close(generator_chan)
+		for {
+			row, err := csv_reader.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Println("Error reading CSV:", err)
+				return
+			}
+			row_data := map[string]string{}
+			for index, field_val := range row {
+				key := constants.MOTOR_MAKER_CSV_TO_MODEL_MAP[headers[index]]
+				row_data[key] = field_val
+			}
+			generator_chan <- &row_data
+		}
+	}()
 	return generator_chan
+
 }
 
 func ValidateBatchData(source chan *structs.BatchData,

@@ -1,6 +1,7 @@
 package constants
 
-var MOTOR_MAKER_CSV_TO_MODEL_MAP = map[string]interface{}{
+var MOTOR_MAKER_CSV_TO_MODEL_MAP = map[string]string{
+	"Transaction Type":                   "transaction_type",
 	"RM code":                            "rm_code",
 	"RM Name1":                           "rm_name",
 	"Child ID":                           "child_id",

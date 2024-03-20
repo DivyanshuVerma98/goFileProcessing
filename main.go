@@ -13,5 +13,6 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/fms/upload_doc/", handlers.UploadFileHandler).Methods("POST")
+	router.Use(handlers.Middleware)
 	http.ListenAndServe(":3000", router)
 }

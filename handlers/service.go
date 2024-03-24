@@ -10,7 +10,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"reflect"
 	"runtime"
+	"strconv"
 	"sync"
 
 	"github.com/DivyanshuVerma98/goFileProcessing/constants"
@@ -35,11 +37,10 @@ func MotorService(w http.ResponseWriter, r *http.Request) {
 		return
 
 	}
-	is_valid, msg := utils.ValidateHeaders(headers,
-		constants.MOTOR_MAKER_CSV_TO_MODEL_MAP)
-	if !is_valid {
-		log.Println("Invalid headers: ", msg)
-		SendResponse(w, "Invalid headers. "+msg, http.StatusBadRequest, map[string]string{})
+	err = utils.ValidateHeaders(headers, constants.MotorMakerCSVToModelMap)
+	if err != nil {
+		log.Println("Invalid headers: ", err)
+		SendResponse(w, err.Error(), http.StatusBadRequest, map[string]string{})
 		return
 	}
 	// Reset file pointer to the beginning
@@ -48,54 +49,63 @@ func MotorService(w http.ResponseWriter, r *http.Request) {
 		SendResponse(w, "Error processing file", http.StatusInternalServerError, map[string]string{})
 		return
 	}
-	response := []structs.BatchData{}
+	response := []interface{}{}
 	// batch_size, _ := strconv.Atoi(os.Getenv("MOTOR_BATCH_SIZE"))
 	batch_size := 1
-	batch_generator_chan := BatchGenerator(&file, batch_size)
-	valid_batch_chan := ValidateBatchGenerator(batch_generator_chan)
+	batch_generator_chan := BatchGenerator(&file, batch_size,
+		constants.MotorMakerCSVToModelMap)
+	valid_batch_chan := ValidateBatchGenerator(batch_generator_chan,
+		reflect.TypeOf(structs.MotorPolicy{}))
 	for val := range valid_batch_chan {
+		utils.ValidateMotorBatchData(val)
 		response = append(response, *val)
 	}
 	SendResponse(w, "Success", http.StatusOK, response)
 }
 
-func ValidateBatchGenerator(source_chan <-chan *structs.BatchData) <-chan *structs.BatchData {
+func ValidateBatchGenerator(sourceChan <-chan *structs.BatchData,
+	resType reflect.Type) <-chan *interface{} {
 	log.Println("Inside ValidateBatchGenerator")
-	generator_chan := make(chan *structs.BatchData)
+	generatorChan := make(chan *interface{})
 	var wg sync.WaitGroup
 	go func() {
 		for i := 0; i < runtime.NumCPU()-1; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for batch_data := range source_chan {
-					for _, policy_data := range batch_data.ValidList {
+				if resType == reflect.TypeOf(structs.MotorPolicy{}) {
+					fmt.Println("GOT IT")
+				}
+				for batchData := range sourceChan {
+					for key, policy_data := range batchData.PolicyDetails.DataMap {
 						if !utils.IsValidDateFormat(policy_data["booking_data"]) {
-
-							batch_data.ErrorList = append(batch_data.ErrorList, policy_data)
-
-							// batch_data.Error[policy_no] = "Date format error. Invalid format - " + row_data.BookingDate
+							batchData.ErrorDetails.MessageMap[key] = "Date format error. Invalid format - " + policy_data["booking_data"]
 						}
 					}
-					generator_chan <- batch_data
+					generatorChan <- batchData.GetInterface()
 				}
 			}()
 		}
 		wg.Wait()
-		close(generator_chan)
+		close(generatorChan)
 	}()
-	return generator_chan
+	return generatorChan
 }
 
-func BatchGenerator(file *multipart.File, batch_size int) <-chan *structs.BatchData {
+func BatchGenerator(file *multipart.File, batch_size int, csv_to_model_map map[string]string) <-chan *structs.BatchData {
 	log.Println("Inside BatchGenerator")
 	generator_chan := make(chan *structs.BatchData)
 	csv_reader := csv.NewReader(*file)
 	headers, _ := csv_reader.Read()
 	go func() {
 		defer close(generator_chan)
+		// This will act as the key value for each policy
+		// in BatchData.PolicyDetails.DataMap
+		policy_count := 1
+		// To keep track of batches
 		batch_count := 0
 		batch_data := structs.BatchData{}
+		batch_data.Initialize()
 		for {
 			row, err := csv_reader.Read()
 			if err == io.EOF {
@@ -106,30 +116,29 @@ func BatchGenerator(file *multipart.File, batch_size int) <-chan *structs.BatchD
 				return
 			}
 			row_data := map[string]string{}
+			field_list := []string{}
 			for index, field_val := range row {
-				key := constants.MOTOR_MAKER_CSV_TO_MODEL_MAP[headers[index]]
+				key := csv_to_model_map[headers[index]]
 				row_data[key] = field_val
+				field_list = append(field_list, field_val)
 			}
-			batch_data.ValidList = append(batch_data.ValidList, row_data)
+			batch_data.PolicyDetails.DataMap[strconv.Itoa(policy_count)] = row_data
+			batch_data.PolicyDetails.RowMap[strconv.Itoa(policy_count)] = field_list
+			policy_count += 1
+			// batch_data.ValidList = append(batch_data.ValidList, row_data)
 			batch_count += 1
 			if batch_count >= batch_size {
 				batch_count = 0
-				data_copy := structs.BatchData{
-					ValidList: batch_data.ValidList,
-					ErrorList: batch_data.ErrorList,
-				}
-				generator_chan <- &data_copy
-				batch_data = structs.BatchData{}
+				copy := batch_data.Copy()
+				generator_chan <- copy
+				batch_data.Initialize()
 			}
 		}
 		if batch_count > 0 {
 			batch_count = 0
-			data_copy := structs.BatchData{
-				ValidList: batch_data.ValidList,
-				ErrorList: batch_data.ErrorList,
-			}
-			generator_chan <- &data_copy
-			batch_data = structs.BatchData{}
+			copy := batch_data.Copy()
+			generator_chan <- copy
+			batch_data.Initialize()
 		}
 	}()
 	return generator_chan
@@ -260,3 +269,29 @@ func UploadFile(file_path string, result chan string) {
 	result <- url + "/" + api_reponse.Data.ReferenceID
 
 }
+
+// "BatchData":{
+// 	"PolicyDetails": {
+// 		"data_map": {
+// 			"1": {
+// 				"booking_Data": ""
+// 			}
+// 		}
+// 	},
+// 	"ErrorDetials": {
+// 		""
+// 	}
+// }
+
+// {
+// 	"PolicyData":{
+// 		"1":{
+// 			"booking_date": "20/02/2023"
+// 		}
+// 	},
+// 	"ErrorData":{
+// 		"1": {
+// 			"message": "Booking date is not valid"
+// 		}
+// 	}
+// }

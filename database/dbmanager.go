@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/DivyanshuVerma98/goFileProcessing/structs"
 	"github.com/jmoiron/sqlx"
@@ -35,9 +36,101 @@ func enableUUIDExtension(db *sqlx.DB) error {
 	return err
 }
 
+// func GetMotorData(searchKey string, keyList []string) ([]*structs.MotorPolicy, error) {
+// 	start := time.Now()
+// 	fmt.Println("EXECUTING QUERY ", start)
+// 	placeholders := make([]string, len(keyList))
+// 	for i, key := range keyList {
+// 		placeholders[i] = fmt.Sprintf("'%s'", key)
+// 	}
+// 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)", "motorinsurance", searchKey, strings.Join(placeholders, ", "))
+// 	// Fetch data from the database
+// 	rows, err := DB.Query(query)
+// 	if err != nil {
+// 		log.Println("Error quering db:", err)
+// 		return nil, err
+// 	}
+// 	defer rows.Close()
+
+// 	var policies []*structs.MotorPolicy
+// 	for rows.Next() {
+// 		var policy structs.MotorPolicy
+// 		err := rows.Scan(
+// 			&policy.ID,
+// 			&policy.TransactionType,
+// 			&policy.RmCode,
+// 			&policy.RmName,
+// 			&policy.ChildID,
+// 			&policy.BookingDate,
+// 			&policy.InsurerName,
+// 			&policy.InsuredName,
+// 			&policy.MajorCategory,
+// 			&policy.Product,
+// 			&policy.ProductType,
+// 			&policy.PolicyNumber,
+// 			&policy.PlanType,
+// 			&policy.Premium,
+// 			&policy.NetPremium,
+// 			&policy.OD,
+// 			&policy.TP,
+// 			&policy.CommissionablePremium,
+// 			&policy.RegistrationNo,
+// 			&policy.RTOCode,
+// 			&policy.State,
+// 			&policy.RTOCluster,
+// 			&policy.City,
+// 			&policy.InsurerBiff,
+// 			&policy.FuelType,
+// 			&policy.CPA,
+// 			&policy.CC,
+// 			&policy.GVW,
+// 			&policy.NCBType,
+// 			&policy.SeatingCapacity,
+// 			&policy.VehicleRegistrationYear,
+// 			&policy.DiscountInPercentage,
+// 			&policy.Make,
+// 			&policy.Model,
+// 			&policy.CTG,
+// 			&policy.IDV,
+// 			&policy.UniqueId,
+// 			&policy.SumInsuredVal,
+// 			&policy.VehicleRegistrationDate,
+// 			&policy.UTR,
+// 			&policy.UTRDate,
+// 			&policy.UTRAmount,
+// 			&policy.SlotPaymentBatch,
+// 			&policy.PaidOnIn,
+// 			&policy.TentativeInPercentage,
+// 			&policy.TentativeInAmount,
+// 			&policy.PaidOnOut,
+// 			&policy.OutPercentage,
+// 			&policy.OutAmount,
+// 			&policy.TotalOutAmount,
+// 			&policy.COType,
+// 			&policy.Remarks,
+// 			&policy.BUHead,
+// 			&policy.Manager,
+// 			&policy.EnricherStatus,
+// 			&policy.ApproverStatus,
+// 			&policy.EnricherRemark,
+// 			&policy.ApproverRemark,
+// 		)
+// 		if err != nil {
+// 			log.Println("Error scanning row:", err)
+// 			return nil, err
+// 		}
+// 		policies = append(policies, &policy)
+// 	}
+
+// 	fmt.Println("CONVERTED DATA ", time.Since(start))
+// 	return policies, nil
+
+// }
+
 func GetMotorData(searchKey string, keyList []string) ([]structs.MotorPolicy, error) {
 	var policies []structs.MotorPolicy
-
+	start := time.Now()
+	fmt.Println("EXECUTING QUERY ", start)
 	placeholders := make([]string, len(keyList))
 	args := make([]interface{}, len(keyList))
 	for i, key := range keyList {
@@ -45,8 +138,9 @@ func GetMotorData(searchKey string, keyList []string) ([]structs.MotorPolicy, er
 		args[i] = key
 	}
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)", "motorinsurance", searchKey, strings.Join(placeholders, ", "))
-
+	fmt.Println("GOT DATA ", time.Since(start))
 	err := DB.Select(&policies, query, args...)
+	fmt.Println("CONVERTED DATA ", time.Since(start))
 	if err != nil {
 		fmt.Println("Error executing query:", err)
 		return nil, err

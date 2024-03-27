@@ -23,6 +23,8 @@ import (
 
 func MotorService(w http.ResponseWriter, r *http.Request) {
 	file, handler, err := r.FormFile("data_file")
+	userData := r.Context().Value(UserDataKey)
+	fmt.Println("userData", userData)
 	if err != nil {
 		log.Println("Error retrieving file: ", err)
 		http.Error(w, "Error retrieving file", http.StatusBadRequest)
@@ -34,25 +36,25 @@ func MotorService(w http.ResponseWriter, r *http.Request) {
 	headers, err := csv_reader.Read()
 	if err != nil {
 		log.Println("Error reading file: ", err)
-		SendResponse(w, "Error reading file", http.StatusBadRequest, map[string]string{})
+		SendResponse(w, "Error reading file", http.StatusBadRequest, nil)
 		return
 
 	}
 	err = utils.ValidateHeaders(headers, constants.MotorMakerCSVToModelMap)
 	if err != nil {
 		log.Println("Invalid headers: ", err)
-		SendResponse(w, err.Error(), http.StatusBadRequest, map[string]string{})
+		SendResponse(w, err.Error(), http.StatusBadRequest, nil)
 		return
 	}
 	// Reset file pointer to the beginning
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		log.Println("Error resetting file pointer:", err)
-		SendResponse(w, "Error processing file", http.StatusInternalServerError, map[string]string{})
+		SendResponse(w, "Error processing file", http.StatusInternalServerError, nil)
 		return
 	}
 
 	// batch_size, _ := strconv.Atoi(os.Getenv("MOTOR_BATCH_SIZE"))
-	batch_size := 10000
+	batch_size := 5000
 	batch_generator_chan := batchGenerator(&file, batch_size,
 		constants.MotorMakerCSVToModelMap)
 	valid_batch_chan := validateBatch(batch_generator_chan)
@@ -60,15 +62,24 @@ func MotorService(w http.ResponseWriter, r *http.Request) {
 
 	response := structs.FileUploadResponse{}
 	createReport(db_valid_batch_chan, &response)
+	mediaAuthToken := os.Getenv("MEDIA_URL_AUTH_TOKEN")
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		response.CompleteReportLink = UploadFile("complete_report.csv")
+		response.CompleteReportLink, err = UploadFile("complete_report.csv", mediaAuthToken)
+		if err != nil {
+			SendResponse(w, err.Error(), http.StatusInternalServerError, nil)
+			return
+		}
 	}()
 	go func() {
 		defer wg.Done()
-		response.ErrorReportLink = UploadFile("error_report.csv")
+		response.ErrorReportLink, err = UploadFile("error_report.csv", mediaAuthToken)
+		if err != nil {
+			SendResponse(w, err.Error(), http.StatusInternalServerError, nil)
+			return
+		}
 	}()
 	wg.Wait()
 	SendResponse(w, "Success", http.StatusOK, response)
@@ -219,7 +230,7 @@ func dbValidationBatch(sourceChan <-chan *structs.MotorBatchData) <-chan *struct
 
 func dbValidation(batchData *structs.MotorBatchData) {
 	start := time.Now()
-	fmt.Println("START TIME ", start)
+	// fmt.Println("START TIME ", start)
 	policyNoList := []string{}
 	policyNoKeyMap := map[string]string{}
 	for key, motorPolicy := range batchData.PolicyDetails.DataMap {
@@ -228,6 +239,7 @@ func dbValidation(batchData *structs.MotorBatchData) {
 	}
 	// For Maker Flow
 	policies, _ := database.GetMotorData("policy_number", policyNoList)
+	// fmt.Println("TIME TO GET DATA ", time.Since(start))
 	for _, policy := range policies {
 		key := policyNoKeyMap[policy.PolicyNumber]
 		if policy.ApproverStatus == constants.Approved {
@@ -236,7 +248,7 @@ func dbValidation(batchData *structs.MotorBatchData) {
 			batchData.ErrorDetails.MessageMap[key] = "Policy already exists."
 		}
 	}
-	fmt.Println("AFTER LOGIC ", time.Since(start))
+	// fmt.Println("AFTER LOGIC ", time.Since(start))
 	bulkCreatePolicies := []structs.MotorPolicy{}
 	for key, motorPolicy := range batchData.PolicyDetails.DataMap {
 		_, exists := batchData.ErrorDetails.MessageMap[key]

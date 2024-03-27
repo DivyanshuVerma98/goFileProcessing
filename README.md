@@ -6,5 +6,6 @@ DB_HOST=file_processing_db
 DB_PORT=5432
 MEDIA_URL=None
 GET_USER_DETAILS_URL=None
+MEDIA_URL_AUTH_TOKEN=None
 MOTOR_BATCH_SIZE=1
 --------------------------

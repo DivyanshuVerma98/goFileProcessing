@@ -1,6 +1,18 @@
 package constants
 
+// To set value in Context
+// Need to define a custom type for context key
+type customType string
+
+const UserDataKey customType = "UserData"
+
 const (
+	Motor = "motor"
+
+	MakerBusinessRole    = "fdms_maker"
+	EnricherBusinessRole = "fdms_enricher"
+	ApproverBusinessRole = "fdms_approver"
+
 	Primary     = "PRIMARY"
 	Adjustment  = "ADJUSTMENT"
 	Endorsement = "ENDORSEMENT"
@@ -10,6 +22,10 @@ const (
 	Rejected        = "REJECTED"
 	Approved        = "APPROVED"
 	Pushback        = "PUSHBACK"
+
+	Pass           = "PASS"
+	PartialSuccess = "PARTIAL SUCCESS"
+	Fail           = "FAIL"
 
 	TransactionType         = "TransactionType"
 	RmCode                  = "RmCode"
@@ -61,7 +77,18 @@ const (
 	OutAmount               = "OutAmount"
 	COType                  = "COType"
 	Remarks                 = "Remarks"
+	BUHead                  = "BUHead"
+	Manager                 = "Manager"
+
+	EnricherStatus = "EnricherStatus"
+	ApproverStatus = "ApproverStatus"
+	EnricherRemark = "EnricherRemark"
+	ApproverRemark = "ApproverRemark"
 
 	Failure = "Failure"
 	Success = "Success"
 )
+
+var EnricherAllowedSuccessValues = []string{SentToNextStage, "SEND TO NEXT STAGE", "NEXT STAGE"}
+var ApproverAllowedSuccesValues = []string{Approved, "APPROVE", "SUCCESS"}
+var AllowedRejectedValues = []string{Rejected, "REJECT"}

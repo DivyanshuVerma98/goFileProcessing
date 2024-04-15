@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,7 +20,10 @@ func MapToStruct(data map[string]string, v interface{}) error {
 		if !field.IsValid() {
 			return fmt.Errorf(" Invalid field name: %s", fieldName)
 		}
-
+		fieldValue = strings.TrimSpace(fieldValue)
+		if strings.ToUpper(fieldValue) == "NA" {
+			fieldValue = ""
+		}
 		switch field.Kind() {
 		case reflect.String:
 			field.SetString(fieldValue)
@@ -48,12 +53,34 @@ func MapToStruct(data map[string]string, v interface{}) error {
 			}
 		case reflect.Struct:
 			if len(fieldValue) > 0 {
+				formats := []string{"02/01/2006", "02-01-2006"}
 				if field.Type() == reflect.TypeOf(time.Time{}) {
-					date, err := time.Parse("02/01/2006", fieldValue)
-					if err != nil {
-						return fmt.Errorf(" Failed to parse date field %s: %s", fieldName, err)
+					var date time.Time
+					var err error
+					for _, format := range formats {
+						date, err = time.Parse(format, fieldValue)
+						if err == nil {
+							break
+						}
 					}
 					field.Set(reflect.ValueOf(date))
+				} else if field.Type() == reflect.TypeOf(sql.NullTime{}) {
+					// Handle sql.NullTime type
+					if strings.TrimSpace(fieldValue) != "" {
+						var date time.Time
+						var err error
+						for _, format := range formats {
+							date, err = time.Parse(format, fieldValue)
+							if err == nil {
+								break
+							}
+						}
+						nullTime := sql.NullTime{Time: date, Valid: true}
+						field.Set(reflect.ValueOf(nullTime))
+					} else {
+						nullTime := sql.NullTime{Valid: false}
+						field.Set(reflect.ValueOf(nullTime))
+					}
 				} else {
 					return fmt.Errorf(" Unsupported struct field type for %s", fieldName)
 				}

@@ -1,44 +1,38 @@
 package structs
 
-type PolicyDetails struct {
-	DataMap map[string]map[string]string
-	RowMap  map[string][]string
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// -- File Infomation Model ---------
+type FileInformation struct {
+	ID                    uuid.UUID `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()" json:"id"`
+	Filename              string    `gorm:"size:225" json:"filename"`
+	Status                string    `gorm:"size:255" json:"status"`
+	ProductName           string    `gorm:"size:255" json:"product_name"`
+	NumberOfPolicies      int       `gorm:"type:integer" json:"number_of_policies"`
+	NumberOfSuccess       int       `gorm:"type:integer" json:"number_of_success"`
+	NumberOfFailure       int       `gorm:"type:integer" json:"number_of_failure"`
+	TotalPremiumOfSuccess float64   `gorm:"type:double precision" json:"total_premium_of_success"`
+	TotalPremiumOfFailure float64   `gorm:"type:double precision" json:"total_premium_of_failure"`
+	CompleteReport        string    `gorm:"size:225" json:"complete_report"`
+	ErrorReport           string    `gorm:"size:225" json:"error_report"`
+	BusinessRole          string    `gorm:"size:255" json:"business_role"`
+	UpdatedBy             string
+	CreatedBy             string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
-type ErrorDetails struct {
-	MessageMap map[string]string
+func (FileInformation) TableName() string {
+	return "fms_fileinformation"
 }
 
-type BatchData struct {
-	PolicyDetails PolicyDetails
-	ErrorDetails  ErrorDetails
-}
+// ----------------------------------
 
-func (bd *BatchData) Initialize() {
-	bd.PolicyDetails = PolicyDetails{
-		DataMap: map[string]map[string]string{},
-		RowMap:  map[string][]string{},
-	}
-	bd.ErrorDetails = ErrorDetails{
-		MessageMap: map[string]string{},
-	}
-}
-
-func (bd *BatchData) Copy() *BatchData {
-	copy_data := &BatchData{
-		PolicyDetails: bd.PolicyDetails,
-		ErrorDetails:  bd.ErrorDetails,
-	}
-
-	return copy_data
-}
-
-
-type Manager struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-}
-
+// - To capture Get User Details API response
 type UserData struct {
 	Privileges     []string `json:"privileges"`
 	SystemRoles    []string `json:"system_roles"`
@@ -48,36 +42,17 @@ type UserData struct {
 	BusinessRole   string   `json:"business_role"`
 	LastName       string   `json:"lastname"`
 	FirstName      string   `json:"firstname"`
-	Pospid         string   `json:"pospid"`
-	BusinessName   string   `json:"business_name"`
-	Phone          string   `json:"phone"`
-	Manager        Manager  `json:"manager"`
-	Certifications []string `json:"certifications"`
-	Manages        []string `json:"manages"`
-	Subordinates   []string `json:"subordinates"`
 }
+// -------------------------------------------
 
-type GetUserDataAPIResponse struct {
-	Status  int       `json:"status"`
-	Message string    `json:"message"`
-	Data    UserData  `json:"data"`
-}
-
-// To send upload_file API response
+// --- To send upload_file API response ------
 type FileUploadResponse struct {
-	SucessCount        int    `json:"success_count"`
-	ErrorCount         int    `json:"error_count"`
-	CompleteReportLink string `json:"complete_report_link"`
-	ErrorReportLink    string `json:"error_report_link"`
+	SucessCount           int     `json:"success_count"`
+	ErrorCount            int     `json:"error_count"`
+	TotalPremiumOfSuccess float64 `json:"total_premium_of_success"`
+	TotalPremiumOfFailure float64 `json:"total_premium_of_failure"`
+	CompleteReportLink    string  `json:"complete_report_link"`
+	ErrorReportLink       string  `json:"error_report_link"`
 }
 
-// To capture Upload API response
-type UploadAPIResponse struct {
-	Data    Data   `json:"data"`
-	Status  int    `json:"status"`
-	Message string `json:"message"`
-}
-
-type Data struct {
-	ReferenceID string `json:"referenceid"`
-}
+// -------------------------------------------

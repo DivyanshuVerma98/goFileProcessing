@@ -51,7 +51,12 @@ var MotorMakerCSVToModelMap = map[string]string{
 	"Out Amount":                         OutAmount,
 	"Co type ( ZIBPL/I CARE/Individual)": COType,
 	"Remarks":                            Remarks,
+	"BU_Head":                            BUHead,
+	"Manager":                            Manager,
 }
+
+var MotorEnricherCSVToModelMap = map[string]string{}
+var MotorApproverCSVToModelMap = map[string]string{}
 
 var MotorMandatoryFields = []string{
 	TransactionType, PolicyNumber, BookingDate, Premium,
@@ -1190,3 +1195,18 @@ var MotorInsurerJsonData = map[string]map[string][]string{
 		"misc": {},
 	},
 }
+
+func init() {
+	for key, val := range MotorMakerCSVToModelMap {
+		MotorEnricherCSVToModelMap[key] = val
+		MotorApproverCSVToModelMap[key] = val
+	}
+	MotorEnricherCSVToModelMap["Status"] = EnricherStatus
+	MotorEnricherCSVToModelMap["User Remark"] = EnricherRemark
+	MotorApproverCSVToModelMap["Status"] = ApproverStatus
+	MotorApproverCSVToModelMap["User Remark"] = ApproverRemark
+
+}
+
+var MotorCompleteReportFileName = "Motor-Complete-Report-%s"
+var MotorErrorReportFileName = "Motor-Error-Report-%s"
